@@ -363,6 +363,8 @@ export default class ServerSchema extends BaseUISchema {
       },{
         id: 'username', label: gettext('Username'), type: 'text', group: gettext('Connection'),
         mode: ['properties', 'edit', 'create'],
+        deps: ['passthrough_oauth_identity'],
+        disabled: function(state) { return state.passthrough_oauth_identity; },
         depChange: (state)=>{
           if(obj.origData.username != state.username && !obj.isNew(state) && state.connected){
             obj.informText = gettext(
@@ -385,7 +387,7 @@ export default class ServerSchema extends BaseUISchema {
         id: 'password', label: gettext('Password'), type: 'password',
         group: gettext('Connection'),
         mode: ['create', 'edit'],
-        deps: ['kerberos_conn', 'save_password'],
+        deps: ['kerberos_conn', 'save_password', 'passthrough_oauth_identity'],
         controlProps: {
           maxLength: null,
           autoComplete: 'new-password'
@@ -395,7 +397,7 @@ export default class ServerSchema extends BaseUISchema {
             return false;
           return state.connected || !state.save_password;
         },
-        disabled: function(state) {return state.kerberos_conn;},
+        disabled: function(state) {return state.kerberos_conn || state.passthrough_oauth_identity;},
         helpMessage: gettext('In edit mode the password field is enabled only if Save Password is set to true.')
       },{
         id: 'save_password', label: gettext('Save password?'),
@@ -559,6 +561,23 @@ export default class ServerSchema extends BaseUISchema {
             };
           }
         },
+      },
+      {
+        id: 'passthrough_oauth_identity',
+        label: gettext('Use OAuth identity for database connection?'),
+        type: 'switch',
+        group: gettext('Advanced'),
+        mode: ['properties', 'edit', 'create'],
+        helpMessage: gettext(
+          'When enabled, pgAdmin connects to this server using a system-configured ' +
+          'client certificate and authenticates as the currently logged-in OAuth2 user. ' +
+          'Only available in server mode when pgAdmin itself is configured with OAuth2 ' +
+          'authentication. The Username and Password fields are ignored. Requires ' +
+          'OAUTH_PASSTHROUGH_SSL_CERT and OAUTH_PASSTHROUGH_SSL_KEY to be set by the ' +
+          'server administrator in pgAdmin configuration (e.g. config_system.py). ' +
+          'PostgreSQL must be configured with cert authentication and a pg_ident ' +
+          'map that permits the certificate CN to connect as any user.'
+        ),
       },
       {
         id: 'passexec_cmd', label: gettext('Password exec command'), type: 'text',

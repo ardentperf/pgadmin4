@@ -960,6 +960,25 @@ SERVER_HEARTBEAT_TIMEOUT = 30  # In seconds
 ENABLE_SERVER_PASS_EXEC_CMD = False
 
 #############################################################################
+# OAUTH_PASSTHROUGH_SSL_CERT and OAUTH_PASSTHROUGH_SSL_KEY configure the
+# client certificate used when a server has passthrough_oauth_identity
+# enabled.  These must be set by the server administrator (e.g. in
+# config_system.py); they are never stored in the pgAdmin database and are
+# never exposed through the UI.
+#
+# When set, a server with passthrough_oauth_identity=True will connect to
+# PostgreSQL using this certificate, with the currently logged-in OAuth2
+# user's username as the PostgreSQL user.  PostgreSQL must be configured
+# with cert authentication and a pg_ident map that allows the certificate
+# CN to connect as any user (the same pattern pgbouncer uses).
+#
+# The key file should have 0400 permissions, owned by the pgAdmin process
+# user.  Both values default to None, which disables the feature entirely.
+#############################################################################
+OAUTH_PASSTHROUGH_SSL_CERT = None
+OAUTH_PASSTHROUGH_SSL_KEY = None
+
+#############################################################################
 # Maximum number of Tags allowed on a server node
 ##############################################################################
 MAX_SERVER_TAGS_ALLOWED = 5

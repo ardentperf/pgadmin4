@@ -39,6 +39,35 @@ describe('ServerSchema', ()=>{
     await getPropertiesView(createSchemaObject(), getInitData);
   });
 
+  describe('passthrough_oauth_identity field', ()=>{
+    it('passthrough_oauth_identity field exists as a switch in the Advanced group', ()=>{
+      let field = schemaObj.fields.find(f => f.id === 'passthrough_oauth_identity');
+      expect(field).toBeDefined();
+      expect(field.type).toBe('switch');
+      expect(field.group).toContain('Advanced');
+    });
+
+    it('username field is disabled when passthrough is enabled', ()=>{
+      let field = schemaObj.fields.find(f => f.id === 'username');
+      expect(field).toBeDefined();
+      expect(typeof field.disabled).toBe('function');
+      expect(field.disabled({passthrough_oauth_identity: true})).toBe(true);
+      expect(field.disabled({passthrough_oauth_identity: false})).toBe(false);
+    });
+
+    it('password field is disabled when passthrough is enabled (independent of kerberos_conn)', ()=>{
+      let field = schemaObj.fields.find(f => f.id === 'password');
+      expect(field).toBeDefined();
+      expect(typeof field.disabled).toBe('function');
+      // Passthrough alone disables it
+      expect(field.disabled({passthrough_oauth_identity: true, kerberos_conn: false})).toBe(true);
+      // Kerberos alone still disables it (existing behaviour preserved)
+      expect(field.disabled({passthrough_oauth_identity: false, kerberos_conn: true})).toBe(true);
+      // Neither: enabled
+      expect(field.disabled({passthrough_oauth_identity: false, kerberos_conn: false})).toBe(false);
+    });
+  });
+
   it('validate', ()=>{
     let state = {};
     let setError = jest.fn();

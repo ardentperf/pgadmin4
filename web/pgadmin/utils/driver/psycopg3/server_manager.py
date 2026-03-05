@@ -117,6 +117,7 @@ class ServerManager(object):
         self.gss_authenticated = False
         self.gss_encrypted = False
         self.connection_params = server.connection_params
+        self.passthrough_oauth_identity = server.passthrough_oauth_identity
         self.create_connection_string(self.db, self.user)
         self.prepare_threshold = server.prepare_threshold
         self.post_connection_sql = server.post_connection_sql
@@ -650,10 +651,20 @@ WHERE db.oid = {0}""".format(did))
 
         return value
 
-    def create_connection_string(self, database, user, password=None):
+    def create_connection_string(self, database, user, password=None,
+                                  strip_keys=None, inject_params=None):
         """
         This function is used to create connection string based on the
         parameters.
+
+        strip_keys  -- optional set of connection_params keys to omit from
+                       the DSN (used by the OAuth passthrough branch to
+                       prevent user-configured sslcert/sslkey overriding the
+                       system-level passthrough certificate).
+        inject_params -- optional dict of key/value pairs to add to the DSN
+                        after connection_params have been processed (used by
+                        the OAuth passthrough branch to inject the system-
+                        configured certificate paths).
         """
         dsn_args = dict()
         dsn_args['host'] = self.host
@@ -677,6 +688,12 @@ WHERE db.oid = {0}""".format(did))
         # Loop through all the connection parameters set in the server dialog.
         if self.connection_params and isinstance(self.connection_params, dict):
             for key, value in self.connection_params.items():
+                # Skip keys that the caller wants to suppress (e.g. the OAuth
+                # passthrough branch strips sslcert/sslkey from connection_params
+                # so the system-level certificate takes precedence).
+                if strip_keys and key in strip_keys:
+                    continue
+
                 with_complete_path = False
                 orig_value = value
                 # Getting complete file path if the key is one of the below.
@@ -698,6 +715,14 @@ WHERE db.oid = {0}""".format(did))
                 dsn_args[key] = value
                 display_dsn_args[key] = orig_value if with_complete_path else \
                     value
+
+        # Merge any caller-supplied params after the connection_params loop so
+        # they take final precedence (used by the OAuth passthrough branch to
+        # inject system-configured certificate paths).
+        if inject_params:
+            for key, value in inject_params.items():
+                dsn_args[key] = value
+                display_dsn_args[key] = value
 
         self.display_connection_string = make_conninfo(**display_dsn_args)
 

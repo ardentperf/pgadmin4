@@ -801,7 +801,8 @@ class ServerNode(PGChildNodeView):
             'connection_params': 'connection_params',
             'prepare_threshold': 'prepare_threshold',
             'tags': 'tags',
-            'post_connection_sql': 'post_connection_sql'
+            'post_connection_sql': 'post_connection_sql',
+            'passthrough_oauth_identity': 'passthrough_oauth_identity'
         }
 
         disp_lbl = {
@@ -1229,7 +1230,9 @@ class ServerNode(PGChildNodeView):
                 connection_params=connection_params,
                 prepare_threshold=data.get('prepare_threshold', None),
                 tags=data.get('tags', None),
-                post_connection_sql=data.get('post_connection_sql', None)
+                post_connection_sql=data.get('post_connection_sql', None),
+                passthrough_oauth_identity=data.get(
+                    'passthrough_oauth_identity', False)
             )
             db.session.add(server)
             db.session.commit()

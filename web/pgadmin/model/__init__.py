@@ -33,7 +33,7 @@ import config
 #
 ##########################################################################
 
-SCHEMA_VERSION = 49
+SCHEMA_VERSION = 50
 
 ##########################################################################
 #
@@ -266,6 +266,8 @@ class Server(db.Model):
         nullable=False, default=0
     )
     post_connection_sql = db.Column(db.String(), nullable=True)
+    passthrough_oauth_identity = db.Column(
+        db.Boolean(), nullable=False, default=False)
 
     def clone(self):
         d = dict(self.__dict__)
@@ -498,6 +500,8 @@ class SharedServer(db.Model):
     shared = db.Column(db.Boolean(), nullable=False)
     connection_params = db.Column(MutableDict.as_mutable(types.JSON))
     prepare_threshold = db.Column(db.Integer(), nullable=True)
+    passthrough_oauth_identity = db.Column(
+        db.Boolean(), nullable=False, default=False)
 
 
 class Macros(db.Model):

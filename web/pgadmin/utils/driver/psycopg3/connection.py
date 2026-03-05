@@ -28,6 +28,7 @@ from psycopg._encodings import py_codecs as encodings
 
 import config
 from pgadmin.model import User
+from pgadmin.utils.constants import OAUTH2
 from pgadmin.utils.exception import ConnectionLost, CryptKeyMissing
 from pgadmin.utils import get_complete_file_path
 from ..abstract import BaseConnection
@@ -56,6 +57,64 @@ _ = gettext
 # Register global type caster which will be applicable to all connections.
 register_global_typecasters()
 configure_driver_encodings(encodings)
+
+
+def _check_passthrough_oauth(manager):
+    """
+    Enforce all security gates for the OAuth passthrough identity feature.
+
+    Returns a (username, cert_path, key_path) tuple when all gates pass,
+    or None when the feature is not enabled for this server.
+
+    Raises Exception (never falls back silently) if the feature is enabled
+    but any gate fails.  This ensures the highly-privileged passthrough
+    certificate can only be used when:
+
+      1. Both cert and key paths are configured by the server administrator
+         in config_system.py (never stored in the pgAdmin database).
+      2. The current pgAdmin user is actively authenticated.
+      3. The current pgAdmin user authenticated via OAuth2 — not via internal
+         password, LDAP, Kerberos, or any other method.
+    """
+    if not getattr(manager, 'passthrough_oauth_identity', False):
+        return None
+
+    cert = current_app.config.get('OAUTH_PASSTHROUGH_SSL_CERT')
+    key = current_app.config.get('OAUTH_PASSTHROUGH_SSL_KEY')
+
+    if not cert:
+        raise Exception(
+            gettext(
+                'Server is configured for OAuth passthrough identity but '
+                'OAUTH_PASSTHROUGH_SSL_CERT is not set in pgAdmin '
+                'configuration.  Contact your pgAdmin server administrator.'
+            )
+        )
+    if not key:
+        raise Exception(
+            gettext(
+                'Server is configured for OAuth passthrough identity but '
+                'OAUTH_PASSTHROUGH_SSL_KEY is not set in pgAdmin '
+                'configuration.  Contact your pgAdmin server administrator.'
+            )
+        )
+    if not current_user.is_authenticated:
+        raise Exception(
+            gettext(
+                'OAuth passthrough identity requires an authenticated user.  '
+                'Please log in before connecting.'
+            )
+        )
+    if current_user.auth_source != OAUTH2:
+        raise Exception(
+            gettext(
+                'OAuth passthrough identity requires OAuth2 authentication.  '
+                'Current authentication source: {0}.  Please log in via an '
+                'OAuth2 provider to use this server.'
+            ).format(current_user.auth_source)
+        )
+
+    return current_user.username, cert, key
 
 
 class Connection(BaseConnection):
@@ -274,6 +333,11 @@ class Connection(BaseConnection):
 
         manager = self.manager
 
+        # OAuth passthrough: check all security gates before any password
+        # resolution.  _check_passthrough_oauth() either raises (gate failed),
+        # returns None (feature disabled), or returns (user, cert, key).
+        passthrough = _check_passthrough_oauth(manager)
+
         crypt_key_present, crypt_key = get_crypt_key()
         if not crypt_key_present:
             raise CryptKeyMissing()
@@ -323,30 +387,45 @@ class Connection(BaseConnection):
 
         try:
             database = self.db
-            if 'user' in kwargs and kwargs['user']:
-                user = kwargs['user']
-            else:
-                user = manager.user
             conn_id = self.conn_id
 
             import os
             os.environ['PGAPPNAME'] = '{0} - {1}'.format(
                 config.APP_NAME, conn_id)
 
-            ssl_key = get_complete_file_path(
-                manager.get_connection_param_value('sslkey'))
-            sslmode = manager.get_connection_param_value('sslmode')
-            if ssl_key and sslmode in \
-                    ['require', 'verify-ca', 'verify-full']:
-                ssl_key_file_permission = \
-                    int(oct(os.stat(ssl_key).st_mode)[-3:])
-                if ssl_key_file_permission > 600:
-                    os.chmod(ssl_key, 0o600)
+            if passthrough is not None:
+                # Passthrough mode: use OAuth identity and system certificate.
+                # The stored server username and any user-configured
+                # sslcert/sslkey are intentionally ignored.
+                pt_user, pt_cert, pt_key = passthrough
+                user = pt_user
+            else:
+                if 'user' in kwargs and kwargs['user']:
+                    user = kwargs['user']
+                else:
+                    user = manager.user
+
+                ssl_key = get_complete_file_path(
+                    manager.get_connection_param_value('sslkey'))
+                sslmode = manager.get_connection_param_value('sslmode')
+                if ssl_key and sslmode in \
+                        ['require', 'verify-ca', 'verify-full']:
+                    ssl_key_file_permission = \
+                        int(oct(os.stat(ssl_key).st_mode)[-3:])
+                    if ssl_key_file_permission > 600:
+                        os.chmod(ssl_key, 0o600)
 
             with ConnectionLocker(manager.kerberos_conn):
                 # Create the connection string
-                connection_string = manager.create_connection_string(
-                    database, user, password)
+                if passthrough is not None:
+                    connection_string = manager.create_connection_string(
+                        database, user, password=None,
+                        strip_keys={'sslcert', 'sslkey'},
+                        inject_params={'sslcert': pt_cert, 'sslkey': pt_key}
+                    )
+                else:
+                    connection_string = manager.create_connection_string(
+                        database, user, password)
 
                 if self.async_:
                     autocommit = True
