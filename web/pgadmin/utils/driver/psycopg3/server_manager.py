@@ -652,7 +652,7 @@ WHERE db.oid = {0}""".format(did))
         return value
 
     def create_connection_string(self, database, user, password=None,
-                                  strip_keys=None, inject_params=None):
+                                 strip_keys=None, inject_params=None):
         """
         This function is used to create connection string based on the
         parameters.
@@ -689,7 +689,8 @@ WHERE db.oid = {0}""".format(did))
         if self.connection_params and isinstance(self.connection_params, dict):
             for key, value in self.connection_params.items():
                 # Skip keys that the caller wants to suppress (e.g. the OAuth
-                # passthrough branch strips sslcert/sslkey from connection_params
+                # passthrough branch strips sslcert/sslkey from
+                # connection_params so the system-level cert takes precedence.
                 # so the system-level certificate takes precedence).
                 if strip_keys and key in strip_keys:
                     continue

@@ -152,7 +152,6 @@ class TestPassthroughGates(BaseTestGenerator):
                 )
 
 
-
 # ---------------------------------------------------------------------------
 # Connection string correctness tests
 # ---------------------------------------------------------------------------
@@ -346,7 +345,8 @@ class TestPassthroughConnectionString(BaseTestGenerator):
         # get_complete_file_path: return the value unchanged for absolute paths
         # (mirrors real behaviour for already-absolute paths).
         with patch(
-            'pgadmin.utils.driver.psycopg3.server_manager.get_complete_file_path',
+            'pgadmin.utils.driver.psycopg3.server_manager'
+            '.get_complete_file_path',
             side_effect=lambda p: p
         ):
             result = ServerManager.create_connection_string(
@@ -363,12 +363,18 @@ class TestPassthroughConnectionString(BaseTestGenerator):
         # User assertion
         self.assertEqual(
             parsed.get('user'), self.assert_user,
-            msg=f"Expected user='{self.assert_user}', got '{parsed.get('user')}'"
+            msg=(
+                f"Expected user='{self.assert_user}',"
+                f" got '{parsed.get('user')}'"
+            )
         )
         if self.assert_not_user:
             self.assertNotEqual(
                 parsed.get('user'), self.assert_not_user,
-                msg=f"user must not be '{self.assert_not_user}' (stored server username)"
+                msg=(
+                    f"user must not be '{self.assert_not_user}'"
+                    ' (stored server username)'
+                )
             )
 
         # Keys that must be present
@@ -389,12 +395,18 @@ class TestPassthroughConnectionString(BaseTestGenerator):
         if self.assert_sslcert is not None:
             self.assertEqual(
                 parsed.get('sslcert'), self.assert_sslcert,
-                msg=f"sslcert should be the system config path, got '{parsed.get('sslcert')}'"
+                msg=(
+                    'sslcert should be the system config path,'
+                    f" got '{parsed.get('sslcert')}'"
+                )
             )
         if self.assert_sslkey is not None:
             self.assertEqual(
                 parsed.get('sslkey'), self.assert_sslkey,
-                msg=f"sslkey should be the system config path, got '{parsed.get('sslkey')}'"
+                msg=(
+                    'sslkey should be the system config path,'
+                    f" got '{parsed.get('sslkey')}'"
+                )
             )
 
         # Other params preserved
