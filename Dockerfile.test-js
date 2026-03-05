@@ -1,0 +1,28 @@
+##########################################################################
+# Dockerfile for running pgAdmin4 JavaScript (Jest) tests.
+#
+# Build:  docker build -f Dockerfile.test-js -t pgadmin-test-js .
+# Run:    docker run --rm pgadmin-test-js
+##########################################################################
+
+FROM node:20-slim
+
+WORKDIR /pgadmin4/web
+
+# Install yarn 4 via corepack (ships with Node 20, just needs enabling).
+RUN corepack enable && \
+    yarn set version berry && \
+    yarn set version 4
+
+# Copy only the files needed for dependency installation first so
+# yarn install is cached across code changes.
+COPY web/package.json web/yarn.lock web/.yarnrc.yml ./
+
+RUN yarn install --immutable
+
+# Copy the rest of the web source.
+COPY web/ .
+
+# Default: run the server schema spec (includes our new tests).
+# Override CMD to run all JS tests: yarn run test:js-once
+CMD ["yarn", "run", "jest", "--testPathPatterns", "server.ui.spec", "--no-coverage"]

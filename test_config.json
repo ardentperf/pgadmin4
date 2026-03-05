@@ -1,0 +1,28 @@
+{
+  "pgAdmin4_login_credentials": {
+    "login_username": "admin@pgadmin.org",
+    "login_password": "masterpass"
+  },
+  "server_credentials": [
+    {
+      "name": "PostgreSQL",
+      "comment": "PostgreSQL test server",
+      "host": "postgres",
+      "db_port": 5432,
+      "maintenance_db": "postgres",
+      "db_username": "postgres",
+      "db_password": "password",
+      "role": "",
+      "sslmode": "prefer",
+      "tablespace_path": "/tmp",
+      "enabled": true,
+      "default_binary_paths": {
+        "pg": "",
+        "ppas": ""
+      }
+    }
+  ],
+  "server_group": 1,
+  "browser_type": "chrome",
+  "headless_chrome": true
+}

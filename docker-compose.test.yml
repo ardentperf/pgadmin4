@@ -1,0 +1,44 @@
+##########################################################################
+# docker-compose.test.yml — run pgAdmin4 tests in isolation.
+#
+# Run all:          docker compose -f docker-compose.test.yml up --build
+# Python only:      docker compose -f docker-compose.test.yml up --build test-python
+# JavaScript only:  docker compose -f docker-compose.test.yml up --build test-js
+#
+# Run the full Python suite (not just our package):
+#   docker compose -f docker-compose.test.yml run --rm test-python \
+#     python regression/runtests.py --exclude feature_tests
+#
+# Run all JS tests:
+#   docker compose -f docker-compose.test.yml run --rm test-js \
+#     yarn run test:js-once
+##########################################################################
+
+services:
+
+  postgres:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_PASSWORD: password
+      POSTGRES_USER: postgres
+      POSTGRES_DB: postgres
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  test-python:
+    build:
+      context: .
+      dockerfile: Dockerfile.test-python
+    depends_on:
+      postgres:
+        condition: service_healthy
+    init: true
+
+  test-js:
+    build:
+      context: .
+      dockerfile: Dockerfile.test-js
+    init: true

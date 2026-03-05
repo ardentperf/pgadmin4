@@ -1,0 +1,9 @@
+web/node_modules
+web/config_*.py
+web/*.log
+.DS_Store
+web/pgadmin/messages.pot
+web/pgadmin/translations/??/LC_MESSAGES/messages.po
+docs/en_US/_build/**/*
+src-build/**/*
+dist/**/*

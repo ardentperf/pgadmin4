@@ -1,0 +1,48 @@
+##########################################################################
+# Dockerfile for running pgAdmin4 Python unit tests.
+# Does NOT require a running PostgreSQL server — tests that need DB
+# connections use mocks.
+#
+# Build:  docker build -f Dockerfile.test-python -t pgadmin-test-python .
+# Run:    docker run --rm pgadmin-test-python
+##########################################################################
+
+FROM python:3.10-slim
+
+# Native library headers required by psycopg[c] and gssapi.
+# cryptography and most other packages install from pre-built wheels.
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        gcc \
+        libpq-dev \
+        libkrb5-dev \
+        libffi-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /pgadmin4
+
+# Install Python dependencies before copying source so this layer is
+# cached across code changes.
+COPY requirements.txt ./
+COPY web/regression/requirements.txt ./web/regression/requirements.txt
+RUN pip install --no-cache-dir \
+        wheel \
+        sphinx==7.4.7 \
+        sphinxcontrib-youtube \
+    && pip install --no-cache-dir -r web/regression/requirements.txt
+
+# Copy the full source now that deps are cached.
+COPY . .
+COPY test_config.json web/regression/test_config.json
+
+# Minimal pgAdmin config so the Flask app initialises without a real
+# installation.  SERVER_MODE=False avoids multi-user auth requirements.
+COPY config_test_local.py web/config_local.py
+RUN mkdir -p /tmp/pgadmin_test
+
+WORKDIR /pgadmin4/web
+
+# Default: run only the OAuth passthrough unit tests.
+# Override CMD to run the full suite or a different package.
+CMD ["python", "regression/runtests.py", \
+     "--pkg", "utils.driver.psycopg3.tests.test_passthrough_oauth", \
+     "--exclude", "feature_tests"]
