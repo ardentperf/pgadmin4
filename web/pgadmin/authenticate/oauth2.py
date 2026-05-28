@@ -52,16 +52,37 @@ def init_app(app):
                      methods=['GET', 'POST'])
     @pgCSRFProtect.exempt
     def oauth_authorize():
-        auth_obj = session['auth_obj']
-        auth_obj.set_current_source(auth_obj.source.get_source_name())
+        # Reconstruct the minimal AuthSourceManager state from the session.
+        # The previous design stored a live AuthSourceManager instance,
+        # which required serializable-anything session storage and
+        # presented a deserialization vector. Now we persist only the
+        # OAuth2 provider name and re-look-up the auth-source from
+        # current_app's registry.
+        from pgadmin.authenticate import AuthSourceManager, get_auth_sources
+        oauth2_client = session.get('oauth2_current_client')
+        if not oauth2_client:
+            current_app.logger.warning(
+                "OAuth2 callback received without provider context; "
+                "session may have expired between login and callback")
+            flash(gettext("Login session expired. Please try again."),
+                  MessageType.ERROR)
+            return redirect(get_safe_post_logout_redirect())
+
+        oauth2_source = get_auth_sources(OAUTH2)
+        # Restore the provider selection onto the (process-global) source
+        # instance so login() picks the right OAuth2 client.
+        oauth2_source.oauth2_current_client = oauth2_client
+
+        auth_obj = AuthSourceManager({}, [OAUTH2])
+        auth_obj.set_source(oauth2_source)
+        auth_obj.set_current_source(oauth2_source.get_source_name())
+
         status, msg = auth_obj.login()
         if status:
             session['auth_source_manager'] = auth_obj.as_dict()
-            if 'auth_obj' in session:
-                session.pop('auth_obj')
+            session.pop('oauth2_current_client', None)
             return redirect(get_safe_post_login_redirect())
-        if 'auth_obj' in session:
-            session.pop('auth_obj')
+        session.pop('oauth2_current_client', None)
         logout_user()
         flash(msg, MessageType.ERROR)
         return redirect(get_safe_post_login_redirect())
@@ -437,9 +458,9 @@ class OAuth2Authentication(BaseAuthentication):
 
     def login(self, form):
         if not self.oauth2_current_client:
-            error_msg = 'No OAuth2 provider available.'
+            error_msg = gettext('No OAuth2 provider available.')
             current_app.logger.error(error_msg)
-            return False, gettext(error_msg)
+            return False, error_msg
 
         profile = self.get_user_profile()
         profile_dict = self.get_profile_dict(profile)
@@ -468,35 +489,35 @@ class OAuth2Authentication(BaseAuthentication):
             not id_token_claims and
             not profile_dict
         ):
-            error_msg = "No profile data found from OIDC provider."
+            error_msg = gettext("No profile data found from OIDC provider.")
             current_app.logger.error(error_msg)
-            return False, gettext(error_msg)
+            return False, error_msg
 
         # For non-OIDC providers, profile is required
         if not self._is_oidc_provider() and not profile_dict:
-            error_msg = "No profile data found."
+            error_msg = gettext("No profile data found.")
             current_app.logger.error(error_msg)
-            return False, gettext(error_msg)
+            return False, error_msg
 
         # Resolve username using OIDC-aware logic
         username, email = self._resolve_username(id_token_claims, profile_dict)
 
         if not username:
             if self._is_oidc_provider():
-                error_msg = (
+                error_msg = gettext(
                     'Could not extract username from OIDC claims. '
                     'Please ensure your OIDC provider returns standard '
                     'claims (email, preferred_username, or sub).'
                 )
             else:
-                error_msg = (
+                error_msg = gettext(
                     'An email id or OAUTH2_USERNAME_CLAIM is required to '
                     'login into pgAdmin. Please update your OAuth2 profile '
                     'for email id or set OAUTH2_USERNAME_CLAIM config '
                     'parameter.'
                 )
             current_app.logger.error(error_msg)
-            return False, gettext(error_msg)
+            return False, error_msg
 
         additional_claims = None
         if 'OAUTH2_ADDITIONAL_CLAIMS' in self.oauth2_config[
@@ -678,10 +699,12 @@ class OAuth2Authentication(BaseAuthentication):
             self.oauth2_current_client].authorize_redirect(redirect_url)
 
     def __auto_create_user(self, username, email):
-        if config.OAUTH2_AUTO_CREATE_USER:
-            user = User.query.filter_by(username=username,
-                                        auth_source=OAUTH2).first()
-            if not user:
+        user = User.query.filter_by(username=username,
+                                    auth_source=OAUTH2).first()
+        if user:
+            return True, {'username': username}
+        else:
+            if config.OAUTH2_AUTO_CREATE_USER:
                 create_msg = ("Creating user {0} with email {1} "
                               "from auth source OAUTH2.")
                 current_app.logger.info(create_msg.format(username,
@@ -693,18 +716,20 @@ class OAuth2Authentication(BaseAuthentication):
                     'active': True,
                     'auth_source': OAUTH2
                 })
-
-        return True, {'username': username}
+            else:
+                return False, gettext('No Email/Username found.'
+                                      ' Please contact your administrator.')
 
     def __is_any_claim_valid(self, identity, additional_claims):
         if additional_claims is None:
-            reason = "Additional claim config is None, no check to do."
+            reason = gettext("Additional claim config is None,"
+                             " no check to do.")
             return (True, reason)
         if not isinstance(additional_claims, dict):
-            reason = "Additional claim check config is not a dict."
+            reason = gettext("Additional claim check config is not a dict.")
             return (False, reason)
-        if additional_claims.keys() is None:
-            reason = "Additional claim check config dict is empty."
+        if len(additional_claims.keys()) == 0:
+            reason = gettext("Additional claim check config dict is empty.")
             return (False, reason)
         for key in additional_claims.keys():
             claim = identity.get(key)
@@ -716,7 +741,7 @@ class OAuth2Authentication(BaseAuthentication):
             if not isinstance(authorized_claims, list):
                 authorized_claims = [authorized_claims]
             if any(item in authorized_claims for item in claim):
-                reason = "Claim match found. Authorized access."
+                reason = gettext("Claim match found. Authorized access.")
                 return True, reason
-        reason = "No match was found."
+        reason = gettext("No match was found.")
         return False, reason
