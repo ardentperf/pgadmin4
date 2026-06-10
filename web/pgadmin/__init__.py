@@ -865,8 +865,9 @@ def create_app(app_name=None):
     def after_request(response):
         if config.LOG_AUTHENTICATED_USER:
             if current_user.is_authenticated and current_user.username:
-                # HTTP headers are latin-1 only; avoid 500s for unicode usernames
-                safe = current_user.username.encode('latin-1', 'replace').decode('latin-1')
+                # Encode as latin-1 to avoid gunicorn 500s for unicode names
+                safe = current_user.username.encode(
+                    'latin-1', 'replace').decode('latin-1')
                 response.headers['X-Remote-User'] = safe
             else:
                 response.headers.pop('X-Remote-User', None)
