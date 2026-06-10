@@ -5,6 +5,14 @@ from config import JSON_LOGGER, CONSOLE_LOG_LEVEL, CONSOLE_LOG_FORMAT_JSON
 
 gunicorn.SERVER_SOFTWARE = "Python"
 
+# Include the authenticated user identity in the access log.
+# %({x_remote_user}e)s reads the x_remote_user WSGI environ key set
+# by pgAdmin for authenticated requests; unauthenticated requests log '-'.
+access_log_format = (
+    '%(h)s %(l)s %({x_remote_user}e)s %(t)s "%(r)s" %(s)s %(b)s '
+    '"%(f)s" "%(a)s"'
+)
+
 if JSON_LOGGER:
     logconfig_dict = {
         "version": 1,

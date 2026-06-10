@@ -871,6 +871,11 @@ def create_app(app_name=None):
 
     @app.after_request
     def after_request(response):
+        if current_user.is_authenticated and current_user.username:
+            request.environ['x_remote_user'] = current_user.username
+        else:
+            request.environ.pop('x_remote_user', None)
+
         if 'key' in request.args:
             domain = dict()
             if config.COOKIE_DEFAULT_DOMAIN and \
